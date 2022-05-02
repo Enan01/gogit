@@ -21,18 +21,22 @@ const (
 	CommandGitCommit = "git commit -m '%s'"
 )
 
-var loopInterval int
+var (
+	loopInterval int
+	count        int
+)
 
 // TODO
 var netHealthy bool
 
 func main() {
 	flag.IntVar(&loopInterval, "i", 5, "执行间隔时间，单位：秒")
+	flag.IntVar(&count, "c", 0, "执行次数（值 <=0 不限制次数，默认不限制次数）")
 	flag.Parse()
 
-	go gitLoop(loopInterval)
-
-	waitSignal()
+	quitChan := make(chan struct{})
+	go gitLoop(loopInterval, quitChan)
+	waitSignal(quitChan)
 }
 
 func execCommand(command string) (string, error) {
@@ -47,45 +51,61 @@ func execCommand(command string) (string, error) {
 	return outString, err
 }
 
-func gitLoop(loopInterval int) error {
+func gitLoop(loopInterval int, quitChan chan struct{}) error {
+	c := 0
 	for {
-		func() {
-			if _, err := execCommand(CommandGitPull); err != nil {
-				return
-			}
+		gitExec()
+		c++
 
-			out, err := execCommand(CommandGitStatus)
-			if err != nil {
-				return
-			}
-			if len(out) == 0 {
-				return
-			}
+		if count > 0 && c >= count {
+			close(quitChan)
+			return nil
+		}
 
-			if _, err := execCommand(CommandGitAdd); err != nil {
-				return
-			}
-
-			commitMsg := fmt.Sprintf("changed files:\n%s", out)
-			commitCmd := fmt.Sprintf(CommandGitCommit, commitMsg)
-			_, err = execCommand(commitCmd)
-			if err != nil {
-				return
-			}
-
-			if _, err := execCommand(CommandGitPush); err != nil {
-				return
-			}
-		}()
+		// 执行间隔时间
 		time.Sleep(time.Duration(loopInterval) * time.Second)
 	}
 }
 
-func waitSignal() {
+func gitExec() {
+	if _, err := execCommand(CommandGitPull); err != nil {
+		return
+	}
+
+	out, err := execCommand(CommandGitStatus)
+	if err != nil {
+		return
+	}
+	if len(out) == 0 {
+		return
+	}
+
+	if _, err := execCommand(CommandGitAdd); err != nil {
+		return
+	}
+
+	commitMsg := fmt.Sprintf("changed files:\n%s", out)
+	commitCmd := fmt.Sprintf(CommandGitCommit, commitMsg)
+	_, err = execCommand(commitCmd)
+	if err != nil {
+		return
+	}
+
+	if _, err := execCommand(CommandGitPush); err != nil {
+		return
+	}
+}
+
+func waitSignal(quitChan chan struct{}) {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
-	si := <-c
-	log.Printf("program exit %s!", si)
+
+	select {
+	case <-quitChan:
+		log.Printf("program exit quit")
+	case si := <-c:
+		log.Printf("program exit %s!", si)
+	}
 }
 
 func checkNetHealth() {
