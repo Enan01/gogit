@@ -24,6 +24,7 @@ const (
 var (
 	loopInterval int
 	count        int
+	pull         bool
 )
 
 // TODO
@@ -32,6 +33,7 @@ var netHealthy bool
 func main() {
 	flag.IntVar(&loopInterval, "i", 5, "执行间隔时间，单位：秒")
 	flag.IntVar(&count, "c", 0, "执行次数（值 <=0 不限制次数，默认不限制次数）")
+	flag.BoolVar(&pull, "pull", false, "指定执行 pull 操作")
 	flag.Parse()
 
 	quitChan := make(chan struct{})
@@ -69,6 +71,11 @@ func gitLoop(loopInterval int, quitChan chan struct{}) error {
 
 func gitExec() {
 	if _, err := execCommand(CommandGitPull); err != nil {
+		return
+	}
+
+	// 如果指定了 pull 操作，直接返回
+	if pull {
 		return
 	}
 

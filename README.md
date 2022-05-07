@@ -15,8 +15,12 @@ $ go build
 ```
 $ ./gogit -h
 Usage of ./gogit:
+  -c int
+    	执行次数（值 <=0 不限制次数，默认不限制次数）
   -i int
     	执行间隔时间，单位：秒 (default 5)
+  -pull
+    	指定执行 pull 操作
 ```
 
 ```sh
