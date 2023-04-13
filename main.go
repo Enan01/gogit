@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -14,11 +15,17 @@ import (
 )
 
 const (
-	CommandGitPull   = "git pull"
-	CommandGitPush   = "git push"
-	CommandGitStatus = "git status -s"
-	CommandGitAdd    = "git add ."
-	CommandGitCommit = "git commit -m '%s'"
+	CommandGitPull    = "git pull"
+	CommandGitPush    = "git push"
+	CommandGitStatus  = "git status"
+	CommandGitStatuss = "git status -s"
+	CommandGitAdd     = "git add ."
+	CommandGitCommit  = "git commit -m '%s'"
+)
+
+const (
+	GitStatusUpToDateMessage = "Your branch is up to date"
+	GitStatusAheadMessage    = "Your branch is ahead of"
 )
 
 var (
@@ -70,6 +77,16 @@ func gitLoop(loopInterval int, quitChan chan struct{}) error {
 }
 
 func gitExec() {
+	var (
+		out string
+		err error
+	)
+
+	defer func() {
+		if err != nil {
+			log.Printf("gitExec cause err: %s\n", err)
+		}
+	}()
 	if _, err := execCommand(CommandGitPull); err != nil {
 		return
 	}
@@ -79,15 +96,29 @@ func gitExec() {
 		return
 	}
 
-	out, err := execCommand(CommandGitStatus)
+	out, err = execCommand(CommandGitStatuss)
 	if err != nil {
 		return
 	}
+
 	if len(out) == 0 {
-		return
+		out, err = execCommand(CommandGitStatus)
+		if err != nil {
+			return
+		}
+		if strings.Contains(out, GitStatusUpToDateMessage) {
+			// 本地和远程已同步，不做任何操作
+			return
+		} else if strings.Contains(out, GitStatusAheadMessage) {
+			// 本地领先于远程，执行 push
+			if _, err = execCommand(CommandGitPush); err != nil {
+				return
+			}
+			return
+		}
 	}
 
-	if _, err := execCommand(CommandGitAdd); err != nil {
+	if _, err = execCommand(CommandGitAdd); err != nil {
 		return
 	}
 
@@ -98,7 +129,7 @@ func gitExec() {
 		return
 	}
 
-	if _, err := execCommand(CommandGitPush); err != nil {
+	if _, err = execCommand(CommandGitPush); err != nil {
 		return
 	}
 }
